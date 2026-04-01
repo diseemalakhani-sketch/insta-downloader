@@ -7,31 +7,60 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
+// 🔥 headers improve
+function getHeaders() {
+    return {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.instagram.com/",
+    };
+}
+
+// 🔥 URL clean
+function cleanUrl(url) {
+    if (url.includes("?")) {
+        return url.split("?")[0];
+    }
+    return url;
+}
+
 app.get("/api", async (req, res) => {
-    const url = req.query.url;
+    let url = req.query.url;
 
     if (!url) {
         return res.json({ status: false, msg: "No URL" });
     }
 
+    url = cleanUrl(url);
+
     try {
         const response = await axios.get(url, {
-            headers: {
-                "User-Agent": "Mozilla/5.0",
-                "Referer": "https://www.instagram.com/"
-            }
+            headers: getHeaders()
         });
 
         const html = response.data;
 
-        let match = html.match(/"video_url":"([^"]+)"/);
+        let videoUrl = null;
 
-        if (!match) {
-            match = html.match(/"contentUrl":"([^"]+)"/);
+        // 🔥 Method 1
+        let match1 = html.match(/"video_url":"([^"]+)"/);
+
+        // 🔥 Method 2
+        let match2 = html.match(/"contentUrl":"([^"]+)"/);
+
+        // 🔥 Method 3 (meta tag)
+        let match3 = html.match(/property="og:video" content="([^"]+)"/);
+
+        if (match1 && match1[1]) {
+            videoUrl = match1[1];
+        } else if (match2 && match2[1]) {
+            videoUrl = match2[1];
+        } else if (match3 && match3[1]) {
+            videoUrl = match3[1];
         }
 
-        if (match && match[1]) {
-            let videoUrl = match[1]
+        if (videoUrl) {
+            videoUrl = videoUrl
                 .replace(/\\u0026/g, "&")
                 .replace(/\\/g, "");
 
@@ -41,10 +70,16 @@ app.get("/api", async (req, res) => {
             });
         }
 
-        res.json({ status: false, msg: "Video not found" });
+        return res.json({
+            status: false,
+            msg: "Video not found (Instagram changed)"
+        });
 
     } catch (err) {
-        res.json({ status: false, msg: err.message });
+        return res.json({
+            status: false,
+            msg: "Error: " + err.message
+        });
     }
 });
 
