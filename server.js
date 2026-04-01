@@ -7,20 +7,17 @@ app.use(cors());
 
 const PORT = process.env.PORT || 3000;
 
-// 🔥 headers improve
 function getHeaders() {
     return {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        "User-Agent": "Mozilla/5.0",
         "Accept-Language": "en-US,en;q=0.9",
-        "Referer": "https://www.instagram.com/",
+        "Referer": "https://www.instagram.com/"
     };
 }
 
-// 🔥 URL clean
+// clean URL
 function cleanUrl(url) {
-    if (url.includes("?")) {
-        return url.split("?")[0];
-    }
+    if (url.includes("?")) return url.split("?")[0];
     return url;
 }
 
@@ -42,21 +39,39 @@ app.get("/api", async (req, res) => {
 
         let videoUrl = null;
 
-        // 🔥 Method 1
-        let match1 = html.match(/"video_url":"([^"]+)"/);
+        // 🔥 METHOD 1 (og tag)
+        let ogMatch = html.match(/property="og:video" content="([^"]+)"/);
+        if (ogMatch && ogMatch[1]) {
+            videoUrl = ogMatch[1];
+        }
 
-        // 🔥 Method 2
-        let match2 = html.match(/"contentUrl":"([^"]+)"/);
+        // 🔥 METHOD 2 (NEXT DATA JSON)
+        if (!videoUrl) {
+            let jsonMatch = html.match(/<script type="application\/json"[^>]*>(.*?)<\/script>/);
 
-        // 🔥 Method 3 (meta tag)
-        let match3 = html.match(/property="og:video" content="([^"]+)"/);
+            if (jsonMatch && jsonMatch[1]) {
+                try {
+                    let jsonData = JSON.parse(jsonMatch[1]);
 
-        if (match1 && match1[1]) {
-            videoUrl = match1[1];
-        } else if (match2 && match2[1]) {
-            videoUrl = match2[1];
-        } else if (match3 && match3[1]) {
-            videoUrl = match3[1];
+                    // deep search function
+                    function findVideo(obj) {
+                        if (!obj) return null;
+
+                        if (typeof obj === "object") {
+                            for (let key in obj) {
+                                if (key === "video_url" && typeof obj[key] === "string") {
+                                    return obj[key];
+                                }
+                                let result = findVideo(obj[key]);
+                                if (result) return result;
+                            }
+                        }
+                        return null;
+                    }
+
+                    videoUrl = findVideo(jsonData);
+                } catch (e) {}
+            }
         }
 
         if (videoUrl) {
@@ -72,13 +87,13 @@ app.get("/api", async (req, res) => {
 
         return res.json({
             status: false,
-            msg: "Video not found (Instagram changed)"
+            msg: "Video not found (updated Instagram)"
         });
 
     } catch (err) {
         return res.json({
             status: false,
-            msg: "Error: " + err.message
+            msg: err.message
         });
     }
 });
